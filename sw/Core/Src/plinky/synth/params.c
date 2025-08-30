@@ -288,6 +288,10 @@ s8 param_index_poly(Param param_id, u8 string_id) {
 	return value_to_index(param_val_poly(param_id, string_id), param_range(param_id));
 }
 
+s8 get_root_note(void) {
+	return param_index(P_ROOT_NOTE) - 12; // Convert to -12 to +12 range
+}
+
 // == SAVING == //
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
@@ -655,6 +659,8 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 			return val_buf;
 		case R_LFOSHP:
 			return lfo_shape_name[index];
+		case R_ROOTNT:
+			return root_note_name[index % 12];
 		default:
 			break;
 		}

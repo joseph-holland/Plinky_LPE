@@ -14,8 +14,7 @@ typedef enum Section {
 
 typedef enum Item {
 	// system
-	I_ROOT_NOTE = S_SYSTEM * 8,
-	I_ACCEL_SENS,
+	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENCODER_DIR,
 	// midi
 	I_MIDI_IN_CH = S_MIDI * 8,
@@ -27,7 +26,6 @@ typedef enum Item {
 } Item;
 
 const static u8 num_options[NUM_ITEMS] = {
-    [I_ROOT_NOTE] = 12,
     [I_ACCEL_SENS] = 201,
     [I_ENCODER_DIR] = 2,
     [I_MIDI_IN_CH] = 16,
@@ -42,7 +40,6 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 };
 
 const static char* item_name[NUM_ITEMS] = {
-    [I_ROOT_NOTE] = "Root note",
     [I_ACCEL_SENS] = "Acc sens",
     [I_ENCODER_DIR] = "Enc dir",
     [I_MIDI_IN_CH] = "In channel",
@@ -59,9 +56,6 @@ static void select_item(Item item, bool force) {
 		return;
 	cur_item = item;
 	switch (cur_item) {
-	case I_ROOT_NOTE:
-		cur_value = sys_params.root_note;
-		break;
 	case I_ACCEL_SENS:
 		cur_value = sys_params.accel_sens;
 		break;
@@ -86,9 +80,6 @@ static void save_value(u8 value) {
 	value = clampi(value, 0, num_options[cur_item] - 1);
 	u8 saved_value = 0;
 	switch (cur_item) {
-	case I_ROOT_NOTE:
-		saved_value = sys_params.root_note;
-		break;
 	case I_ACCEL_SENS:
 		saved_value = sys_params.accel_sens;
 		break;
@@ -111,9 +102,6 @@ static void save_value(u8 value) {
 		return;
 	cur_value = value;
 	switch (cur_item) {
-	case I_ROOT_NOTE:
-		sys_params.root_note = cur_value;
-		break;
 	case I_ACCEL_SENS:
 		sys_params.accel_sens = cur_value;
 		break;
@@ -183,8 +171,6 @@ void edit_settings_from_encoder(s8 enc_diff) {
 
 static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	switch (item) {
-	case I_ROOT_NOTE:
-		return root_note_name[value];
 	case I_ACCEL_SENS:
 		sprintf(val_buf, "%d", 2 * value - 200);
 		return val_buf;

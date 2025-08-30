@@ -164,7 +164,6 @@ typedef struct SysParams {
 	u8 headphonevol;
 	u8 cv_quant : 2;
 	u8 encoder_reversed : 1;
-	u8 root_note : 4;
 	u8 paddy : 1;
 	u8 pad[16 - 5];
 } SysParams;
@@ -524,7 +523,7 @@ typedef enum ParamRow {
 typedef enum Param {
     P_SHAPE = R_SOUND1 * 6,     P_DISTORTION,   P_PITCH,        P_OCT,          P_GLIDE,        P_INTERVAL,      // Sound 1
 	P_NOISE = R_SOUND2 * 6,     P_RESO,         P_DEGREE,       P_SCALE,        P_MICROTONE,    P_COLUMN,        // Sound 2
-	P_ENV_LVL1 = R_ENV1 * 6,    P_ATTACK1,      P_DECAY1,       P_SUSTAIN1,     P_RELEASE1,     P_ENV1_UNUSED,   // Envelope 1
+	P_ENV_LVL1 = R_ENV1 * 6,    P_ATTACK1,      P_DECAY1,       P_SUSTAIN1,     P_RELEASE1,     P_ROOT_NOTE,     // Envelope 1
 	P_ENV_LVL2 = R_ENV2 * 6,    P_ATTACK2,      P_DECAY2,       P_SUSTAIN2,     P_RELEASE2,     P_ENV2_UNUSED,   // Envelope 2
 	P_DLY_SEND = R_DLY * 6,     P_DLY_TIME,     P_PING_PONG,	P_DLY_WOBBLE,	P_DLY_FEEDBACK,	P_TEMPO,        // Delay
 	P_RVB_SEND = R_RVB * 6,     P_RVB_TIME,     P_SHIMMER,	    P_RVB_WOBBLE,	P_RVB_UNUSED,	P_SWING,        // Reverb
@@ -734,7 +733,7 @@ const static char* const param_row_name[R_NUM_ROWS] = {
 const static char* const param_name[NUM_PARAMS] = {
    [P_SHAPE] = I_SHAPE "Shape",       		[P_DISTORTION] = I_DISTORT "Distortion",   	[P_PITCH] = I_PIANO "Pitch",         		[P_OCT] = I_OCTAVE "Octave",         	[P_GLIDE] = I_GLIDE "Glide",         		[P_INTERVAL] = I_OFFSET "Interval",			// Sound 1
    [P_NOISE] = I_WAVE "Noise",       		[P_RESO] = I_DISTORT "Resonance",         	[P_DEGREE] = I_OFFSET "Degree",       		[P_SCALE] = I_PIANO "Scale",        	[P_MICROTONE] = I_MICRO "Microtone",     	[P_COLUMN] = I_OFFSET "Column",				// Sound 2
-   [P_ENV_LVL1] = I_TOUCH "Sens",			[P_ATTACK1] = I_ADSR_A "Attack",      		[P_DECAY1] = I_ADSR_D "Decay",        		[P_SUSTAIN1] = I_ADSR_S "Sustain",    	[P_RELEASE1] = I_ADSR_R "Release",      	[P_ENV1_UNUSED] = I_CROSS "<unused>",   	// Envelope 1
+   [P_ENV_LVL1] = I_TOUCH "Sens",			[P_ATTACK1] = I_ADSR_A "Attack",      		[P_DECAY1] = I_ADSR_D "Decay",        		[P_SUSTAIN1] = I_ADSR_S "Sustain",    	[P_RELEASE1] = I_ADSR_R "Release",      	[P_ROOT_NOTE] = I_PIANO "Root Note",    	// Envelope 1
    [P_ENV_LVL2] = I_AMPLITUDE "Level",  	[P_ATTACK2] = I_ADSR_A "Attack",      		[P_DECAY2] = I_ADSR_D "Decay",        		[P_SUSTAIN2] = I_ADSR_S "Sustain",    	[P_RELEASE2] = I_ADSR_R "Release",      	[P_ENV2_UNUSED] = I_CROSS "<unused>",   	// Envelope 2
    [P_DLY_SEND] = I_SEND "Send",    		[P_DLY_TIME] = I_TEMPO "Clock Div",     	[P_PING_PONG] = I_TILT "2nd Tap",     		[P_DLY_WOBBLE] = I_WAVE "Wobble",  		[P_DLY_FEEDBACK] = I_FEEDBACK "Feedback",	[P_TEMPO] = I_PLAY "Tempo",         		// Delay
    [P_RVB_SEND] = I_SEND "Send",    		[P_RVB_TIME] = I_TIME "Time",     			[P_SHIMMER] = I_FEEDBACK "Shimmer",     	[P_RVB_WOBBLE] = I_WAVE "Wobble",  		[P_RVB_UNUSED] = I_CROSS "<unused>",    	[P_SWING] = I_TILT "Swing 8th",         	// Reverb

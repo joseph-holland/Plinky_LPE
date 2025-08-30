@@ -65,7 +65,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 
 	// for midi
 	if ((midi_pitch_override & mask) && !(midi_suppress & mask)) {
-		note_pitch = midi_note_to_pitch_offset(midi_note[string_id], midi_channel[string_id]) + sys_params.root_note * PITCH_PER_SEMI;
+		note_pitch = midi_note_to_pitch_offset(midi_note[string_id], midi_channel[string_id]);
 	}
 	// for touch
 	else {
@@ -99,7 +99,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 			u16 position = s_touch_sort->pos; // touch position
 			u8 pad_y = 7 - (position >> 8);   // pad on string
 			// pitch at step + cv + root note transposition
-			note_pitch = pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset) + cv_pitch_offset + sys_params.root_note * PITCH_PER_SEMI;
+			note_pitch = pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset) + cv_pitch_offset + get_root_note() * PITCH_PER_SEMI;
 			// detuning scaled by microtune param
 			s16 fine_pos = 127 - (position & 255); // offset from pad center
 			s32 micro_tune = 64 + param_val_poly(P_MICROTONE, string_id);
