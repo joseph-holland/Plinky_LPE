@@ -1,5 +1,6 @@
 #pragma once
 #include "hardware/midi.h"
+#include "hardware/ram.h"
 #include "params.h"
 #include "utils.h"
 

@@ -141,11 +141,18 @@ static void draw_main_leds(void) {
 				}
 				// draw root notes
 				else {
-					s32 pitch = (pitch_at_step(scale, (7 - y) + root));
-					pitch %= 12 * 512;
+					// Calculate what pitch this pad will actually play (including root note transposition)
+					s32 pitch = (pitch_at_step(scale, (7 - y) + root)) + sys_params.root_note * PITCH_PER_SEMI;
+					pitch %= 12 * PITCH_PER_SEMI;
 					if (pitch < 0)
-						pitch += 12 * 512;
-					if (pitch < 256)
+						pitch += 12 * PITCH_PER_SEMI;
+					// Light up LED if this pitch IS the root note 
+					s32 root_pitch = (sys_params.root_note * PITCH_PER_SEMI) % (12 * PITCH_PER_SEMI);
+					// Calculate minimum distance considering wraparound
+					s32 diff = abs(pitch - root_pitch);
+					s32 wrap_diff = (12 * PITCH_PER_SEMI) - diff;
+					s32 min_diff = mini(diff, wrap_diff);
+					if (min_diff < 256)
 						k = maxi(k, 96);
 				}
 				// draw sequencer

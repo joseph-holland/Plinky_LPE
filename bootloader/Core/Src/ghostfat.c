@@ -186,6 +186,18 @@ static uint32_t flashAddr = NO_CACHE;
 static uint8_t flashBuf[FLASH_PAGE_SIZE] __attribute__((aligned(4)));
 static uint32_t lastFlush;
 
+// Write coalescing buffer to reduce flash operations
+#define WRITE_COALESCE_SIZE 1024
+static uint8_t writeCoalesceBuf[WRITE_COALESCE_SIZE];
+static uint32_t writeCoalesceAddr = NO_CACHE;
+static uint32_t writeCoalesceLen = 0;
+
+// FAT metadata cache to avoid regenerating frequently accessed data
+static uint8_t fatCache[512] __attribute__((aligned(4)));
+static bool fatCacheValid = false;
+static uint8_t rootDirCache[512] __attribute__((aligned(4)));
+static bool rootDirCacheValid = false;
+
 #ifdef NEW_PINOUT
 #define SPI_PORT GPIOE
 #define SPI_CS0_PIN_ GPIO_PIN_1
@@ -282,6 +294,12 @@ int spi_read4k(u32 addr, u8 *dst) {
 		int spirv = spi_read256(addr, dst);
 		if (spirv)
 			return spirv;
+		// Yield to USB processing every 1KB to prevent transfer blocking
+		if ((i % 1024) == 768) {
+			// Brief delay to allow USB stack processing
+			volatile int yield_delay = 10;
+			while (yield_delay--);
+		}
 	}
 	return 0;
 }
@@ -310,6 +328,11 @@ int spi_write4k(u32 addr, u8 *src) {
 			spirv = spi_waitnotbusy("write");
 		if (spirv)
 			break;
+		// Yield to USB processing every 1KB during writes
+		if ((p % 1024) == 768) {
+			volatile int yield_delay = 10;
+			while (yield_delay--);
+		}
 	}
 	return spirv;
 }
@@ -343,8 +366,22 @@ void flash_program_array(void *addr, void *srcbuf, int size_bytes) {
 	}
 }
 
+void flushWriteCoalesce(void) {
+	if (writeCoalesceLen == 0 || writeCoalesceAddr == NO_CACHE)
+		return;
+	
+	// Flush accumulated writes using existing flash_write mechanism
+	flash_write(writeCoalesceAddr, writeCoalesceBuf, writeCoalesceLen);
+	writeCoalesceLen = 0;
+	writeCoalesceAddr = NO_CACHE;
+}
+
 void flushFlash(void) {
 	lastFlush = ms;
+	
+	// First flush any pending coalesced writes
+	flushWriteCoalesce();
+	
 	if (flashAddr == NO_CACHE)
 		return;
 	DBG("Flush at %x", flashAddr);
@@ -375,6 +412,32 @@ int clustersize(int bytes) {
 }
 
 void flash_write(uint32_t dst, const uint8_t *src, int len) {
+	// Use write coalescing for small writes to reduce flash operations
+	if (len <= 256 && (dst & 0x40000000)) { // SPI flash writes
+		// Check if this write is contiguous with the coalesce buffer
+		if (writeCoalesceAddr != NO_CACHE && 
+		    dst == writeCoalesceAddr + writeCoalesceLen &&
+		    writeCoalesceLen + len <= WRITE_COALESCE_SIZE) {
+			// Append to coalesce buffer
+			memcpy(writeCoalesceBuf + writeCoalesceLen, src, len);
+			writeCoalesceLen += len;
+			return;
+		}
+		
+		// Start new coalesce buffer or flush if not contiguous
+		if (writeCoalesceLen > 0) {
+			flushWriteCoalesce();
+		}
+		
+		if (len <= WRITE_COALESCE_SIZE) {
+			writeCoalesceAddr = dst;
+			writeCoalesceLen = len;
+			memcpy(writeCoalesceBuf, src, len);
+			return;
+		}
+	}
+	
+	// For large writes or non-SPI flash, use existing mechanism
 	uint32_t newAddr = dst & ~(FLASH_PAGE_SIZE - 1);
 	if (newAddr != flashAddr) {
 		flushFlash();
@@ -394,7 +457,7 @@ void flushFlash(void) {}
 void ghostfat_1ms() {
 	ms++;
 #ifdef FLASH_PAGE_SIZE
-	if (lastFlush && ms - lastFlush > 100) {
+	if (lastFlush && ms - lastFlush > 50) {
 		flushFlash();
 	}
 #endif
@@ -437,26 +500,51 @@ int read_block(uint32_t block_no, uint8_t *data) {
 		sectionIdx -= START_FAT0;
 		if (sectionIdx >= SECTORS_PER_FAT)
 			sectionIdx -= SECTORS_PER_FAT;
+		
+		// Use cached FAT for sector 0, generate others on demand
 		if (sectionIdx == 0) {
-			data[0] = 0xf8;
-			data[1] = 0xff;
-			data[2] = 0xff;
-			data[3] = 0xff;
-		}
-		int basecluster = sectionIdx * 256;
-		int first_cluster=2;
-		for (int f = 0; f < NUM_FILES; ++f) {
-			int c0 = first_cluster - basecluster;
-			int num_clusters=clustersize(info[f].size);
-			first_cluster+=num_clusters;
-			int c1 = c0 + num_clusters;
-			int last = c1 - 1;
-			if (c0 < 0)
-				c0 = 0;
-			if (c1 > 256)
-				c1 = 256;
-			for (int i = c0; i < c1; ++i)
-				((uint16_t*) (void*) data)[i] = (i == last) ? 0xffff : i + basecluster + 1;
+			if (!fatCacheValid) {
+				memset(fatCache, 0, 512);
+				fatCache[0] = 0xf8;
+				fatCache[1] = 0xff;
+				fatCache[2] = 0xff;
+				fatCache[3] = 0xff;
+				
+				int basecluster = 0;
+				int first_cluster=2;
+				for (int f = 0; f < NUM_FILES; ++f) {
+					int c0 = first_cluster - basecluster;
+					int num_clusters=clustersize(info[f].size);
+					first_cluster+=num_clusters;
+					int c1 = c0 + num_clusters;
+					int last = c1 - 1;
+					if (c0 < 0)
+						c0 = 0;
+					if (c1 > 256)
+						c1 = 256;
+					for (int i = c0; i < c1; ++i)
+						((uint16_t*) (void*) fatCache)[i] = (i == last) ? 0xffff : i + basecluster + 1;
+				}
+				fatCacheValid = true;
+			}
+			memcpy(data, fatCache, 512);
+		} else {
+			// Generate other FAT sectors on demand
+			int basecluster = sectionIdx * 256;
+			int first_cluster=2;
+			for (int f = 0; f < NUM_FILES; ++f) {
+				int c0 = first_cluster - basecluster;
+				int num_clusters=clustersize(info[f].size);
+				first_cluster+=num_clusters;
+				int c1 = c0 + num_clusters;
+				int last = c1 - 1;
+				if (c0 < 0)
+					c0 = 0;
+				if (c1 > 256)
+					c1 = 256;
+				for (int i = c0; i < c1; ++i)
+					((uint16_t*) (void*) data)[i] = (i == last) ? 0xffff : i + basecluster + 1;
+			}
 		}
 	} else if (block_no < START_CLUSTERS) {
 		sectionIdx -= START_ROOTDIR;
@@ -465,25 +553,31 @@ int read_block(uint32_t block_no, uint8_t *data) {
 #define PLINKY_TIME ((10u << 11u) | (23u << 5u) | (00u >> 1u))
 #define PLINKY_DATE ((39u << 9u) | (7u << 5u) | (19u))
 		if (sectionIdx == 0) {
-			DirEntry *d = (void*) data;
-			padded_memcpy(d->name, "PLINKY     ", 11);
-			d->attrs = 0x28;
-			d->createTimeFine = PLINKY_TIME_FRAC;
-			d->createTime = d->updateTime = PLINKY_TIME;
-			d->createDate = d->updateDate = PLINKY_DATE;
-			int first_cluster=2;
-			for (int i = 0; i < NUM_FILES; ++i) {
-				d++;
-				const struct UF2File *inf = &info[i];
-				d->size = inf->size;
-				d->startCluster = first_cluster;
-				d->attrs = 0;	
+			// Use cached root directory
+			if (!rootDirCacheValid) {
+				memset(rootDirCache, 0, 512);
+				DirEntry *d = (void*) rootDirCache;
+				padded_memcpy(d->name, "PLINKY     ", 11);
+				d->attrs = 0x28;
 				d->createTimeFine = PLINKY_TIME_FRAC;
 				d->createTime = d->updateTime = PLINKY_TIME;
 				d->createDate = d->updateDate = PLINKY_DATE;
-				first_cluster+=clustersize(d->size);
-				padded_memcpy(d->name, inf->name, 11);
+				int first_cluster=2;
+				for (int i = 0; i < NUM_FILES; ++i) {
+					d++;
+					const struct UF2File *inf = &info[i];
+					d->size = inf->size;
+					d->startCluster = first_cluster;
+					d->attrs = 0;	
+					d->createTimeFine = PLINKY_TIME_FRAC;
+					d->createTime = d->updateTime = PLINKY_TIME;
+					d->createDate = d->updateDate = PLINKY_DATE;
+					first_cluster+=clustersize(d->size);
+					padded_memcpy(d->name, inf->name, 11);
+				}
+				rootDirCacheValid = true;
 			}
+			memcpy(data, rootDirCache, 512);
 		}
 	} else {
 		sectionIdx -= START_CLUSTERS;

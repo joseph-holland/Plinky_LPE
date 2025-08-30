@@ -164,7 +164,8 @@ typedef struct SysParams {
 	u8 headphonevol;
 	u8 cv_quant : 2;
 	u8 encoder_reversed : 1;
-	u8 paddy : 5;
+	u8 root_note : 4;
+	u8 paddy : 1;
 	u8 pad[16 - 5];
 } SysParams;
 
@@ -839,15 +840,25 @@ const static char* const scale_name[NUM_SCALES] = {
     [S_DIMINISHED] = "Diminished",
 };
 
-static inline const char* note_name(int note) {
+const static char* const root_note_name[12] = {
+    "C", "C+", "D", "D+", "E", "F", "F+", "G", "G+", "A", "A+", "B"
+};
+
+static inline const char* note_name_with_offset(int note, u8 root_offset) {
 	note += 12;
 	if (note < 0 || note > 8 * 12)
 		return "";
 	static char buf[4];
 	int octave = note / 12;
 	note -= octave * 12;
+	// Apply root note offset
+	note = (note + root_offset) % 12;
 	buf[0] = "CCDDEFFGGAAB"[note];
 	buf[1] = " + +  + + + "[note];
 	buf[2] = '0' + octave;
 	return buf;
+}
+
+static inline const char* note_name(int note) {
+	return note_name_with_offset(note, 0);
 }
