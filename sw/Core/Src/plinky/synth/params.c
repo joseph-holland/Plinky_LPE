@@ -15,6 +15,7 @@
 #include "ui/pad_actions.h"
 #include "ui/shift_states.h"
 
+
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
 // There are three ranges of parameters:
@@ -100,6 +101,17 @@ static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
 
 const Preset* init_params_ptr() {
 	return &init_params;
+}
+
+static const char* get_param_row_name(Param param_id) {
+	u8 row = param_id / 6;
+	
+	// FM parameters get their own row name
+	if (param_id >= P_FM_INDEX && param_id <= P_FM_FEEDBACK) {
+		return fm_row_name;
+	}
+	
+	return param_row_name[row];
 }
 
 static Param get_recent_param(void) {
@@ -382,6 +394,48 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 	u8 prev_param = selected_param;
 	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
+	
+	// FM mode parameter remapping: redirect sampler rows to FM params
+	if (using_fm()) {
+		// Row 5 (pad_y == 4): sampler row 1 - main FM parameters
+		if (pad_y == 4 && strip_id >= 1 && strip_id <= 6) {
+			if (ui_mode == UI_EDITING_A) {
+				switch (strip_id) {
+					case 1: selected_param = P_FM_INDEX; break;
+					case 2: selected_param = P_FM_RATIO; break; 
+					case 3: selected_param = P_FM_CARRIER_WAV; break;
+					case 4: selected_param = P_FM_MOD_WAV; break;
+					case 5: selected_param = P_FM_ENV_AMT; break;
+					case 6: selected_param = P_FM_FEEDBACK; break;
+				}
+			} else if (ui_mode == UI_EDITING_B) {
+				// Could add more FM parameters here if needed
+				switch (strip_id) {
+					case 1: selected_param = P_FM_INDEX; break;  // For now, duplicate the main params
+					case 2: selected_param = P_FM_RATIO; break; 
+					case 3: selected_param = P_FM_CARRIER_WAV; break;
+					case 4: selected_param = P_FM_MOD_WAV; break;
+					case 5: selected_param = P_FM_ENV_AMT; break;
+					case 6: selected_param = P_FM_FEEDBACK; break;
+				}
+			}
+		}
+		// Row 6 (pad_y == 5): sampler row 2 - could add more FM parameters here
+		else if (pad_y == 5 && strip_id >= 1 && strip_id <= 6) {
+			// For now, we'll use the same FM parameters for consistency
+			if (ui_mode == UI_EDITING_A) {
+				switch (strip_id) {
+					case 1: selected_param = P_FM_INDEX; break;
+					case 2: selected_param = P_FM_RATIO; break; 
+					case 3: selected_param = P_FM_CARRIER_WAV; break;
+					case 4: selected_param = P_FM_MOD_WAV; break;
+					case 5: selected_param = P_FM_ENV_AMT; break;
+					case 6: selected_param = P_FM_FEEDBACK; break;
+				}
+			}
+		}
+	}
+	
 	if (range_type[selected_param] == R_UNUSED) {
 		selected_param = prev_param;
 		flash_message(F_20_BOLD, I_CROSS "No Param", "");
@@ -607,6 +661,11 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 				return val_buf;
 			}
 			break;
+		// FM waveform parameters (binary)
+		case P_FM_CARRIER_WAV:
+		case P_FM_MOD_WAV:
+			sprintf(val_buf, "%s", index ? "Saw" : "Sine");
+			return val_buf;
 		default:
 			break;
 		}
@@ -753,7 +812,7 @@ void draw_cur_param(void) {
 	// draw section name
 	const char* sect_str;
 	if (src_snap == SRC_BASE) {
-		sect_str = param_row_name[draw_param / 6];
+		sect_str = get_param_row_name(draw_param);
 
 		// manual section name overrides
 		switch (draw_param) {
@@ -923,7 +982,7 @@ void draw_cur_param(void) {
 		return;
 	}
 
-	// default
+	// Parameter names are now handled by the separate FM parameter entries
 	const char* p_name = param_name[draw_param];
 	switch (p_name[0]) {
 	case '\x83': // I_DISTORT

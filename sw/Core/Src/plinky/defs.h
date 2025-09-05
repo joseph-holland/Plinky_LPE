@@ -531,6 +531,9 @@ typedef enum Param {
 	P_LATCH_TGL = R_SEQ * 6,    P_SEQ_ORDER,    P_SEQ_CLK_DIV,  P_SEQ_CHANCE,	P_SEQ_EUC_LEN,	P_GATE_LENGTH,  // Sequencer
 	P_SCRUB = R_SMP1 * 6,       P_GR_SIZE,      P_PLAY_SPD,	    P_SMP_STRETCH,	P_SAMPLE,	    P_PATTERN,      // Sampler 1
 	P_SCRUB_JIT = R_SMP2 * 6,   P_GR_SIZE_JIT,  P_PLAY_SPD_JIT,	P_SMP_UNUSED1,	P_SMP_UNUSED2,	P_STEP_OFFSET,  // Sampler 2
+	// FM Synthesis Parameters (aliased to unused slots - simplified)
+	P_FM_INDEX = P_SMP_UNUSED1, P_FM_RATIO = P_SMP_UNUSED2, P_FM_CARRIER_WAV = P_STEP_OFFSET,
+	P_FM_MOD_WAV = P_ENV2_UNUSED, P_FM_ENV_AMT = P_RVB_UNUSED, P_FM_FEEDBACK = P_RVB_UNUSED,
 	P_A_SCALE = R_A * 6,        P_A_OFFSET,     P_A_DEPTH,      P_A_RATE,	    P_A_SHAPE,	    P_A_SYM,        // LFO A
 	P_B_SCALE = R_B * 6,        P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,	    P_B_SHAPE,	    P_B_SYM,        // LFO B
 	P_X_SCALE = R_X * 6,        P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,	    P_X_SHAPE,	    P_X_SYM,        // LFO X
@@ -728,6 +731,8 @@ const static char* const param_row_name[R_NUM_ROWS] = {
 
 };
 
+const static char* const fm_row_name = I_FM "FM Synth";
+
 // clang-format off
 
 const static char* const param_name[NUM_PARAMS] = {
@@ -741,6 +746,9 @@ const static char* const param_name[NUM_PARAMS] = {
    [P_LATCH_TGL] = I_PLAY "Enable",   		[P_SEQ_ORDER] = I_ORDER "Order",    		[P_SEQ_CLK_DIV] = I_TEMPO "Clock Div",   	[P_SEQ_CHANCE] = I_PERCENT "Chance (S)",[P_SEQ_EUC_LEN] = I_LENGTH "Euclid Len",   	[P_GATE_LENGTH] = I_INTERVAL "Gate Len",	// Sequencer
    [P_SCRUB] = I_RIGHT "Scrub",       		[P_GR_SIZE] = I_PERIOD "Grain Size",      	[P_PLAY_SPD] = I_RIGHT "Play Spd",      	[P_SMP_STRETCH] = I_TIME "Stretch", 	[P_SAMPLE] = I_SEQ "ID",        			[P_PATTERN] = I_SEQ "Pattern ID",      		// Sampler 1
    [P_SCRUB_JIT] = I_RIGHT "Scrub Jit",		[P_GR_SIZE_JIT] = I_PERIOD "Size Jit",		[P_PLAY_SPD_JIT] = I_RIGHT "Spd Jit",		[P_SMP_UNUSED1] = I_CROSS "<unused>", 	[P_SMP_UNUSED2] = I_CROSS "<unused>",   	[P_STEP_OFFSET] = I_OFFSET "Step Ofs",   	// Sampler 2
+   
+   // FM Synthesis Parameter Names
+   [P_FM_INDEX] = I_FM "Index",				[P_FM_RATIO] = I_OFFSET "Ratio",			[P_FM_CARRIER_WAV] = I_WAVE "Carrier Wav",	[P_FM_MOD_WAV] = I_WAVE "Mod Wav",		[P_FM_ENV_AMT] = I_ENV "Env Amount",		[P_FM_FEEDBACK] = I_FEEDBACK "Feedback",	// FM Synth
    [P_A_SCALE] = I_AMPLITUDE "CV Depth",    [P_A_OFFSET] = I_OFFSET "Offset",     		[P_A_DEPTH] = I_AMPLITUDE "Depth",			[P_A_RATE] = I_TEMPO "Clock Div",		[P_A_SHAPE] = I_SHAPE "Shape",       		[P_A_SYM] = I_WARP "Symmetry",         		// LFO A
    [P_B_SCALE] = I_AMPLITUDE "CV Depth",    [P_B_OFFSET] = I_OFFSET "Offset",     		[P_B_DEPTH] = I_AMPLITUDE "Depth",			[P_B_RATE] = I_TEMPO "Clock Div",      	[P_B_SHAPE] = I_SHAPE "Shape",       		[P_B_SYM] = I_WARP "Symmetry",         		// LFO B
    [P_X_SCALE] = I_AMPLITUDE "CV Depth",    [P_X_OFFSET] = I_OFFSET "Offset",     		[P_X_DEPTH] = I_AMPLITUDE "Depth",			[P_X_RATE] = I_TEMPO "Clock Div",      	[P_X_SHAPE] = I_SHAPE "Shape",       		[P_X_SYM] = I_WARP "Symmetry",         		// LFO X

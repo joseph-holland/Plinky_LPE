@@ -8,6 +8,7 @@
 extern Voice voices[NUM_VOICES];
 
 void handle_synth_voices(u32* dst);
+bool using_fm(void);
 
 u8 draw_high_note(void);
 void draw_max_pres(void);
