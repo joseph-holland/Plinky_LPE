@@ -10,9 +10,10 @@
 #include "strings.h"
 #include <math.h>
 
-// FM mode active when P_SHAPE is exactly at minimum (-100% = -1024)
+// FM mode active when P_SHAPE is at -100% (-1024)
 bool using_fm(void) {
-    return cur_preset.params[P_SHAPE][0] == -1024;
+    // FM mode at shape = -100% (bottom of PWM range)
+    return cur_preset.params[P_SHAPE][0] <= -1024;
 }
 
 Voice voices[NUM_VOICES];
@@ -270,91 +271,74 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 
 static inline s32 generate_waveform(u32 phase, u8 waveform_type) {
     switch (waveform_type) {
-        case 0: // Sine - Taylor series approximation
+        case 0: // Sine - parabolic approximation
             {
                 // Convert phase to -pi to pi range
                 s32 x = (s32)(phase >> 16) - 32768;  // -32768 to 32767
                 
-                // Normalize to -1 to 1 range (in fixed point)
-                // x is now in range -32768 to 32767
-                
-                // Simple sine approximation: sin(x) ≈ x - x³/6
-                // But we'll use a better parabolic approximation
+                // Simple sine approximation using parabolic segments
                 s32 abs_x = x < 0 ? -x : x;
                 
-                // Parabolic approximation that goes through (-1,0), (0,1), (1,0)
-                // y = 1 - x² for the peak, then mirror for negative
+                // Parabolic approximation
                 s32 y = 32768 - ((abs_x * abs_x) >> 15);
                 
                 // Apply sign
                 if (x < 0) y = -y;
                 
-                // Scale for better sine shape (compress slightly)
+                // Scale for better sine shape
                 y = (y * 25736) >> 15;  // About 0.785 scaling factor
                 
                 return y;
             }
-        case 1: // Saw - fixed range to ±32768
+        case 1: // Saw - ramps from -32768 to 32767
             return (s32)((phase >> 16) - 32768);
-        case 2: // Square
+        case 2: // Square - alternates between -32768 and 32767
             return (phase & 0x80000000) ? 32767 : -32768;
-        case 3: // Triangle - fixed formula for proper ±32768 range
-            {
-                s32 ramp = (s32)(phase >> 16);  // 0 to 65535
-                if (ramp < 32768) {
-                    return (ramp << 1) - 32768;  // Rising: -32768 to +32766
-                } else {
-                    return 98304 - (ramp << 1);  // Falling: +32766 to -32768 (3*32768=98304)
-                }
-            }
         default:
             return 0;
     }
 }
 
 static inline s32 generate_waveform_blended(u32 phase, s32 waveform_param) {
-    // Extract base waveform (0-3) and blend factor (0-255)
-    u8 base_wave = (waveform_param >> 14) & 3;
-    u8 blend_amount = (waveform_param >> 6) & 255;
+    // For 3 waveforms, divide parameter space into thirds
+    // 0-21845: Sine (with blend to Saw)
+    // 21846-43690: Saw (with blend to Square)  
+    // 43691-65535: Square (with blend to Sine)
     
-    if (blend_amount < 8) {
+    s32 position = waveform_param * 3;  // Scale to 0-196605 range
+    u8 base_wave = position >> 16;      // 0, 1, or 2
+    u16 blend = position & 0xFFFF;      // 0-65535 blend amount
+    
+    if (base_wave >= 3) base_wave = 2;  // Safety clamp
+    
+    if (blend < 256) {
         return generate_waveform(phase, base_wave);  // Pure waveform
     }
     
-    // Blend with next waveform (circular: Sin→Saw→Square→Triangle→Sin)
-    u8 next_wave = (base_wave + 1) & 3;
+    // Circular blending: Sine→Saw→Square→Sine
+    u8 next_wave = (base_wave + 1) % 3;
     s32 wave1 = generate_waveform(phase, base_wave);
     s32 wave2 = generate_waveform(phase, next_wave);
     
-    return wave1 + (((wave2 - wave1) * blend_amount) >> 8);
+    // Blend between waves (blend is 0-65535)
+    return wave1 + (((wave2 - wave1) * (blend >> 8)) >> 8);
 }
 
 static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, 
                                 float noise_diff, float drive, float resonance, u32* dst) {
     float glide = lpf_k(param_val_poly(P_GLIDE, voice_id) >> 2) * (0.5f / SAMPLES_PER_TICK);
     
-    // TEMPORARY: Hardcode FM parameters for testing
-    float fm_index = 1.0f;  // Start with lower modulation for testing
-    float fm_ratio = 1.0f;  // 1:1 ratio for simple FM
-    float fm_env_scale = 0.0f;  // No envelope modulation for now
-    u8 carrier_waveform = 0;  // Sine wave
-    u8 mod_waveform = 0;      // Sine wave
+    // Read FM parameters
+    s32 fm_index_raw = param_val_poly(P_FM_INDEX, voice_id);  // Raw value 0-65536 (percentage)
+    u8 fm_ratio_idx = param_index_poly(P_FM_RATIO, voice_id);  // 0-16 (maps to 0.5-8.5 in 0.5 steps)
     
-    // TEST: First output pure carrier sine waves without modulation
-    // This will verify our basic audio path is working
-    bool test_pure_carrier = true;  // Force pure carrier test
+    // Convert to actual synthesis parameters
+    float fm_index = fm_index_raw * (32.0f / 65536.0f);  // 0-32 range (0-100% maps to 0-32)
+    float fm_ratio = 0.5f + (fm_ratio_idx * 0.5f);  // 0.5, 1.0, 1.5, ... 8.5
     
-    // Original parameter reading (commented out for testing)
-    // s32 fm_index_raw = param_val_poly(P_FM_INDEX, voice_id);
-    // s32 fm_ratio_raw = param_val_poly(P_FM_RATIO, voice_id);
-    // s32 carrier_wave = param_val_poly(P_FM_CARRIER_WAV, voice_id);
-    // s32 mod_wave = param_val_poly(P_FM_MOD_WAV, voice_id);
-    // s32 fm_env_amt = param_val_poly(P_FM_ENV_AMT, voice_id);
-    // float fm_index = fm_index_raw * (16.0f / 65536.0f);
-    // float fm_ratio = 0.25f + (fm_ratio_raw * (8.0f / 65536.0f));
-    // float fm_env_scale = fm_env_amt * (1.0f / 65536.0f);
-    // u8 carrier_waveform = (carrier_wave > 32768) ? 1 : 0;
-    // u8 mod_waveform = (mod_wave > 32768) ? 1 : 0;
+    // Waveform parameters for blending (full resolution)
+    s32 carrier_waveform_param = param_val_poly(P_FM_CARRIER_WAV, voice_id);  // 0-65535
+    s32 mod_waveform_param = param_val_poly(P_FM_MOD_WAV, voice_id);           // 0-65535
     
     // Get modulator oscillator
     Osc* modulator = &voice->osc[2];
@@ -369,10 +353,6 @@ static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg,
         modulator->phase_diff = modulator->goal_phase_diff;
     }
     
-    // For pure carrier test, zero out modulation
-    if (test_pure_carrier) {
-        fm_index = 0.0f;  // No modulation for testing
-    }
     
     // Glide for modulator
     int dd_mod = (int)((modulator->goal_phase_diff - modulator->phase_diff) * glide);
@@ -380,9 +360,6 @@ static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg,
     // Shared modulator phase state (for both carriers)
     u32 mod_phase = modulator->phase;
     s32 mod_phase_diff = modulator->phase_diff;
-    
-    // Noise setup (shared between carriers)
-    float noise = voice->noise_lvl;
     
     // Pre-calculate modulator signals for all samples (fixes phase doubling bug)
     // Single static array is safe since voices are processed sequentially
@@ -393,7 +370,7 @@ static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg,
     for (u8 i = 0; i < SAMPLES_PER_TICK; ++i) {
         temp_mod_phase_diff += dd_mod;
         temp_mod_phase += temp_mod_phase_diff;
-        mod_signals[i] = generate_waveform(temp_mod_phase, mod_waveform);
+        mod_signals[i] = generate_waveform_blended(temp_mod_phase, mod_waveform_param);
     }
     
     // Update shared modulator phase state for next tick
@@ -409,17 +386,9 @@ static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg,
         // Glide for carrier
         int dd_carrier = (int)((carrier->goal_phase_diff - carrier->phase_diff) * glide);
         
-        // Get smoother state for this channel
-        float y1 = voice->lpg_smoother[carrier_id].y1;
-        float y2 = voice->lpg_smoother[carrier_id].y2;
-        
-        // Envelope tracking - use current envelope level
+        // Envelope tracking
         float osc_lpg = voice->env1_lvl;
         float osc_lpg_diff = (goal_lpg - voice->env1_lvl) * (1.f / SAMPLES_PER_TICK);
-        
-        // Local noise and random position for this carrier
-        float local_noise = noise;
-        int rand_table_pos = rand() & 16383;
         
         // Local phase accumulators for carrier
         u32 carrier_phase = carrier->phase;
@@ -430,65 +399,41 @@ static void apply_fm_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg,
             // Use pre-calculated modulator signal (same for both carriers)
             s32 mod_signal = mod_signals[i];
             
-            // Simple phase modulation for FM
-            // Scale modulator output for phase modulation
-            s32 phase_mod = (s32)(mod_signal * fm_index * 256.0f);  // Scale for phase modulation
-            
-            // Update carrier phase with standard increment
+            // Update carrier phase difference (frequency glide)
             carrier_phase_diff += dd_carrier;
-            carrier_phase += carrier_phase_diff;
             
-            // Apply phase modulation to the phase lookup
-            u32 modulated_phase = carrier_phase + phase_mod;
+            // FREQUENCY MODULATION
+            // mod_signal is ±32768, fm_index is 0-16
+            // Scale modulation to be a percentage of carrier frequency
+            s32 freq_modulation = (s32)((float)carrier_phase_diff * mod_signal * fm_index / 32768.0f);
             
-            // Generate carrier output using modulated phase
-            s32 out = generate_waveform(modulated_phase, carrier_waveform);
+            // Apply frequency modulation to the carrier frequency
+            s32 modulated_frequency = carrier_phase_diff + freq_modulation;
             
-            // TEST: For pure carrier test, output directly with simple scaling
-            if (test_pure_carrier) {
-                // Update envelope for this sample
-                osc_lpg += osc_lpg_diff;
-                
-                // Direct output without filter for testing
-                // Scale down and apply simple envelope
-                s32 test_out = (s32)(out * osc_lpg * 0.25f);
-                *osc_dst = SATURATE16(*osc_dst + test_out);
-                osc_dst += 2;
-                continue;  // Skip filter processing
-            }
+            // Update phase with the modulated frequency
+            carrier_phase += modulated_frequency;
             
-            // Apply noise
-            s16 n = ((s16*)rndtab)[rand_table_pos++];
-            local_noise += noise_diff;
+            // Generate carrier output with blending
+            s32 out = generate_waveform_blended(carrier_phase, carrier_waveform_param);
             
-            // Apply filter and envelope
+            // Update envelope
             osc_lpg += osc_lpg_diff;
-            y1 += (out * drive + n * local_noise - (y2 - y1) * resonance - y1) * osc_lpg;
-            y1 *= 0.999f;
-            y2 += (y1 - y2) * osc_lpg;
-            y2 *= 0.999f;
             
-            // Write to output buffer (maintains stereo)
-            s32 smooth_lpg = FLOAT2FIXED(y2, 0);
-            *osc_dst = SATURATE16(*osc_dst + smooth_lpg);
+            // Simple direct output - scale and apply envelope
+            s32 fm_out = (s32)(out * osc_lpg * 0.25f);
+            *osc_dst = SATURATE16(*osc_dst + fm_out);
             osc_dst += 2;  // Skip to next sample of same channel
         }
         
         // Save state back
         carrier->phase = carrier_phase;
         carrier->phase_diff = carrier_phase_diff;
-        voice->lpg_smoother[carrier_id].y1 = y1;
-        voice->lpg_smoother[carrier_id].y2 = y2;
-        
-        // Update shared noise level from this carrier
-        noise = local_noise;
     }
     
     // Save shared modulator state - update from local accumulator
     modulator->phase = mod_phase;
     modulator->phase_diff = mod_phase_diff;
     voice->env1_lvl = goal_lpg;
-    voice->noise_lvl = noise;
 }
 
 static void apply_subtractive_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noise_diff, float drive,

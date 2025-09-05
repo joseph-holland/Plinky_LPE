@@ -31,6 +31,8 @@ typedef enum RangeType {
 	R_LFOSHP, // lfo shape
 	R_VOLUME, // volume
 	R_ROOTNT, // root note (-12 to +12)
+	R_FMRATO, // FM ratio (0.5-8.5)
+	R_FMWAVE, // FM waveform selection
 	R_UNUSED,
 	NUM_RANGE_TYPES,
 } RangeType;
@@ -54,6 +56,8 @@ const static u16 param_info[NUM_RANGE_TYPES] = {
     [R_STOFFS] = SIGNED + 65,
     [R_LFOSHP] = UNSIGNED + NUM_LFO_SHAPES,
     [R_ROOTNT] = SIGNED + 25,
+    [R_FMRATO] = UNSIGNED + 17,  // 0.5-8.5 in 0.5 steps (17 values)
+    [R_FMWAVE] = UNSIGNED + 3,   // 3 waveform types (sine, saw, square)
     [R_UNUSED] = 0,
 };
 
@@ -69,8 +73,9 @@ const static RangeType range_type[NUM_PARAMS] = {
    [P_ARP_TGL] = R_BINARY,     [P_ARP_ORDER] = R_ARPORD,    [P_ARP_CLK_DIV] = R_DUACLK,   [P_ARP_CHANCE] = R_SVALUE,  [P_ARP_EUC_LEN] = R_EUCLEN,   [P_ARP_OCTAVES] = R_ARPOCT,   // Arp
    [P_LATCH_TGL] = R_BINARY,   [P_SEQ_ORDER] = R_SEQORD,    [P_SEQ_CLK_DIV] = R_SEQCLK,   [P_SEQ_CHANCE] = R_SVALUE,  [P_SEQ_EUC_LEN] = R_EUCLEN,   [P_GATE_LENGTH] = R_UVALUE,   // Sequencer
    [P_SCRUB] = R_UVALUE,       [P_GR_SIZE] = R_UVALUE,      [P_PLAY_SPD] = R_SVALUE,      [P_SMP_STRETCH] = R_SVALUE, [P_SAMPLE] = R_SAMPLE,        [P_PATTERN] = R_PATN,         // Sampler 1
-   [P_SCRUB_JIT] = R_UVALUE,   [P_GR_SIZE_JIT] = R_UVALUE,  [P_PLAY_SPD_JIT] = R_UVALUE,  [P_SMP_UNUSED1] = R_UVALUE, [P_SMP_UNUSED2] = R_UVALUE,   [P_STEP_OFFSET] = R_BINARY,   // Sampler 2 / FM params (alias)
-   
+   [P_SCRUB_JIT] = R_UVALUE,   [P_GR_SIZE_JIT] = R_UVALUE,  [P_PLAY_SPD_JIT] = R_UVALUE,  [P_SMP_UNUSED1] = R_UVALUE, [P_SMP_UNUSED2] = R_UVALUE,   [P_STEP_OFFSET] = R_BINARY,   // Sampler 2
+   [P_FM_INDEX] = R_UVALUE,    [P_FM_RATIO] = R_FMRATO,     [P_FM_CARRIER_WAV] = R_FMWAVE, [P_FM_UNUSED1] = R_UNUSED, [P_FM_UNUSED2] = R_UNUSED,   [P_FM_UNUSED3] = R_UNUSED,    // FM Synth 1
+   [P_FM_FEEDBACK] = R_UVALUE, [P_FM_UNUSED7] = R_UNUSED,   [P_FM_MOD_WAV] = R_FMWAVE,     [P_FM_UNUSED4] = R_UNUSED, [P_FM_UNUSED5] = R_UNUSED,    [P_FM_UNUSED6] = R_UNUSED,    // FM Synth 2
    [P_A_SCALE] = R_SVALUE,     [P_A_OFFSET] = R_SVALUE,     [P_A_DEPTH] = R_SVALUE,       [P_A_RATE] = R_DUACLK,      [P_A_SHAPE] = R_LFOSHP,       [P_A_SYM] = R_SVALUE,         // LFO A
    [P_B_SCALE] = R_SVALUE,     [P_B_OFFSET] = R_SVALUE,     [P_B_DEPTH] = R_SVALUE,       [P_B_RATE] = R_DUACLK,      [P_B_SHAPE] = R_LFOSHP,       [P_B_SYM] = R_SVALUE,         // LFO B
    [P_X_SCALE] = R_SVALUE,     [P_X_OFFSET] = R_SVALUE,     [P_X_DEPTH] = R_SVALUE,       [P_X_RATE] = R_DUACLK,      [P_X_SHAPE] = R_LFOSHP,       [P_X_SYM] = R_SVALUE,         // LFO X
@@ -93,7 +98,9 @@ const static Preset init_params = {
         [P_ARP_TGL] = {0},          [P_ARP_ORDER] = {INDEX_TO_RAW(ARP_UP, NUM_ARP_ORDERS)},     [P_ARP_CLK_DIV] = {INDEX_TO_RAW(2, NUM_SYNC_DIVS)}, [P_ARP_CHANCE] = {RAW_SIZE},    [P_ARP_EUC_LEN] = {INDEX_TO_RAW(8, 17)},    [P_ARP_OCTAVES] = {0},              // Arp
         [P_LATCH_TGL] = {0},        [P_SEQ_ORDER] = {INDEX_TO_RAW(SEQ_ORD_FWD, NUM_SEQ_ORDERS)},[P_SEQ_CLK_DIV] = {INDEX_TO_RAW(5, NUM_SYNC_DIVS)}, [P_SEQ_CHANCE] = {RAW_SIZE},    [P_SEQ_EUC_LEN] = {INDEX_TO_RAW(8, 17)},    [P_GATE_LENGTH] = {RAW_SIZE},       // Sequencer
         [P_SCRUB] = {0},            [P_GR_SIZE] = {RAW_HALF},                                   [P_PLAY_SPD] = {RAW_HALF},                          [P_SMP_STRETCH] = {RAW_HALF},   [P_SAMPLE] = {0},                           [P_PATTERN] = {0},                  // Sampler 1
-        [P_SCRUB_JIT] = {0},        [P_GR_SIZE_JIT] = {0},                                      [P_PLAY_SPD_JIT] = {0},                             [P_SMP_UNUSED1] = {RAW_HALF},   [P_SMP_UNUSED2] = {RAW_HALF},                [P_STEP_OFFSET] = {0},              // Sampler 2 / FM params (alias)
+        [P_SCRUB_JIT] = {0},        [P_GR_SIZE_JIT] = {0},                                      [P_PLAY_SPD_JIT] = {0},                             [P_SMP_UNUSED1] = {0},          [P_SMP_UNUSED2] = {0},                       [P_STEP_OFFSET] = {0},              // Sampler 2
+        [P_FM_INDEX] = {0},         [P_FM_RATIO] = {INDEX_TO_RAW(1, 17)},                      [P_FM_CARRIER_WAV] = {0},                           [P_FM_UNUSED1] = {0},           [P_FM_UNUSED2] = {0},                       [P_FM_UNUSED3] = {0},               // FM Synth 1 (ratio=1.0 is index 1)
+        [P_FM_FEEDBACK] = {0},      [P_FM_UNUSED7] = {0},                                       [P_FM_MOD_WAV] = {0},                                [P_FM_UNUSED4] = {0},           [P_FM_UNUSED5] = {0},                       [P_FM_UNUSED6] = {0},               // FM Synth 2
         [P_A_SCALE] = {RAW_HALF},   [P_A_OFFSET] = {0},                                         [P_A_DEPTH] = {0},                                  [P_A_RATE] = {RAW_QUART},       [P_A_SHAPE] = {0},                          [P_A_SYM] = {0},                    // LFO A
         [P_B_SCALE] = {RAW_HALF},   [P_B_OFFSET] = {0},                                         [P_B_DEPTH] = {0},                                  [P_B_RATE] = {RAW_HALF},        [P_B_SHAPE] = {0},                          [P_B_SYM] = {0},                    // LFO B
         [P_X_SCALE] = {RAW_HALF},   [P_X_OFFSET] = {0},                                         [P_X_DEPTH] = {0},                                  [P_X_RATE] = {-246},            [P_X_SHAPE] = {0},                          [P_X_SYM] = {0},                    // LFO X

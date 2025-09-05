@@ -123,78 +123,9 @@ static void draw_startup_visuals(void) {
 // == FM VISUALIZATION == //
 
 static void draw_fm_visualization(void) {
-	// Get current FM parameters for display
-	s32 fm_index_raw = param_val(P_FM_INDEX);
-	s32 fm_ratio_raw = param_val(P_FM_RATIO);
-	s32 carrier_wave = param_val(P_FM_CARRIER_WAV);
-	s32 mod_wave = param_val(P_FM_MOD_WAV);
-	
-	// Convert to display values (matching synthesis engine ranges)
-	float fm_index = fm_index_raw * (16.0f / 65536.0f);
-	if (fm_index < 0.0f) fm_index = 0.0f;
-	if (fm_index > 16.0f) fm_index = 16.0f;
-	
-	float fm_ratio = 0.25f + (fm_ratio_raw * (8.0f / 65536.0f));
-	if (fm_ratio < 0.25f) fm_ratio = 0.25f;
-	if (fm_ratio > 8.0f) fm_ratio = 8.0f;
-	
-	// Waveforms are now binary: 0=Sine, 1=Saw
-	u8 carrier_waveform = (carrier_wave > 32768) ? 1 : 0;
-	u8 mod_waveform = (mod_wave > 32768) ? 1 : 0;
-	
-	// Waveform names (only Sine and Saw for now)
-	const char* wave_names[] = {"SINE", "SAW"};
-	
-	// Draw FM mode indicator with box
-	fill_rectangle(0, 0, 32, 14);  // White background
-	gfx_text_color = 0;  // Black text
-	draw_str(2, 2, F_12_BOLD, "FM");
-	gfx_text_color = 1;  // Back to white text
-	
-	// Draw carrier waveform (left side)
-	draw_str(0, 16, F_8, "C:");
-	draw_str(12, 16, F_8, wave_names[carrier_waveform]);
-	
-	// Draw modulator waveform (left side, below carrier)
-	draw_str(0, 24, F_8, "M:");
-	draw_str(12, 24, F_8, wave_names[mod_waveform]);
-	
-	// Draw simple waveform representation (center area)
-	// Carrier waveform visualization
-	for (u8 x = 48; x < 80; x++) {
-		u8 phase_pos = ((x - 48) * 256) / 32;  // 0-255 range
-		s8 wave_val = 0;
-		
-		if (carrier_waveform == 0) {
-			// Sine wave
-			wave_val = (s8)(sinf((phase_pos * 2.0f * 3.14159f) / 256.0f) * 6.0f);
-		} else {
-			// Saw wave
-			wave_val = (s8)((phase_pos - 128) / 21);  // ±6 range
-		}
-		
-		u8 y_pos = 8 + wave_val;  // Center around y=8
-		if (y_pos < 32) put_pixel(x, y_pos, 1);
-	}
-	
-	// Draw FM parameters (right side)
-	gfx_text_color = 1;
-	
-	// FM Index display
-	if (fm_index < 10.0f) {
-		fdraw_str(90, 0, F_12, "%.1f", fm_index);
-	} else {
-		fdraw_str(90, 0, F_12, "%.0f", fm_index);
-	}
-	draw_str(84, 12, F_8, "INDEX");
-	
-	// FM Ratio display  
-	if (fm_ratio < 10.0f) {
-		fdraw_str(90, 18, F_12, "%.1f", fm_ratio);
-	} else {
-		fdraw_str(90, 18, F_12, "%.0f", fm_ratio);
-	}
-	draw_str(84, 30, F_8, "RATIO");
+	// Just show a simple FM indicator
+	// The actual parameter values are shown when editing
+	draw_str(0, 0, F_12_BOLD, "FM");
 }
 
 static void draw_preset_info(void) {

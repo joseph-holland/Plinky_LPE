@@ -105,12 +105,6 @@ const Preset* init_params_ptr() {
 
 static const char* get_param_row_name(Param param_id) {
 	u8 row = param_id / 6;
-	
-	// FM parameters get their own row name
-	if (param_id >= P_FM_INDEX && param_id <= P_FM_FEEDBACK) {
-		return fm_row_name;
-	}
-	
 	return param_row_name[row];
 }
 
@@ -395,45 +389,22 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 	u8 prev_param = selected_param;
 	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
 	
-	// FM mode parameter remapping: redirect sampler rows to FM params
-	if (using_fm()) {
-		// Row 5 (pad_y == 4): sampler row 1 - main FM parameters
-		if (pad_y == 4 && strip_id >= 1 && strip_id <= 6) {
+	// Contextual row 5 based on synthesis mode
+	// Row 5 (pad_y == 4) switches between synthesis-specific parameters
+	if (pad_y == 4) {  // Row 5 only
+		if (using_fm()) {
+			// In FM mode: show FM parameters instead of sampler
 			if (ui_mode == UI_EDITING_A) {
-				switch (strip_id) {
-					case 1: selected_param = P_FM_INDEX; break;
-					case 2: selected_param = P_FM_RATIO; break; 
-					case 3: selected_param = P_FM_CARRIER_WAV; break;
-					case 4: selected_param = P_FM_MOD_WAV; break;
-					case 5: selected_param = P_FM_ENV_AMT; break;
-					case 6: selected_param = P_FM_FEEDBACK; break;
-				}
-			} else if (ui_mode == UI_EDITING_B) {
-				// Could add more FM parameters here if needed
-				switch (strip_id) {
-					case 1: selected_param = P_FM_INDEX; break;  // For now, duplicate the main params
-					case 2: selected_param = P_FM_RATIO; break; 
-					case 3: selected_param = P_FM_CARRIER_WAV; break;
-					case 4: selected_param = P_FM_MOD_WAV; break;
-					case 5: selected_param = P_FM_ENV_AMT; break;
-					case 6: selected_param = P_FM_FEEDBACK; break;
-				}
+				// Top shift (Shift+A): FM1 parameters
+				selected_param = P_FM_INDEX + (strip_id - 1);
+			} else {
+				// Bottom shift (Shift+B): FM2 parameters
+				selected_param = P_FM_FEEDBACK + (strip_id - 1);
 			}
 		}
-		// Row 6 (pad_y == 5): sampler row 2 - could add more FM parameters here
-		else if (pad_y == 5 && strip_id >= 1 && strip_id <= 6) {
-			// For now, we'll use the same FM parameters for consistency
-			if (ui_mode == UI_EDITING_A) {
-				switch (strip_id) {
-					case 1: selected_param = P_FM_INDEX; break;
-					case 2: selected_param = P_FM_RATIO; break; 
-					case 3: selected_param = P_FM_CARRIER_WAV; break;
-					case 4: selected_param = P_FM_MOD_WAV; break;
-					case 5: selected_param = P_FM_ENV_AMT; break;
-					case 6: selected_param = P_FM_FEEDBACK; break;
-				}
-			}
-		}
+		// else: keep default (sampler parameters)
+		// Future: else if (using_wavetable()) { ... }
+		// Future: else if (using_pwm()) { ... }
 	}
 	
 	if (range_type[selected_param] == R_UNUSED) {
@@ -661,11 +632,12 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 				return val_buf;
 			}
 			break;
-		// FM waveform parameters (binary)
-		case P_FM_CARRIER_WAV:
-		case P_FM_MOD_WAV:
-			sprintf(val_buf, "%s", index ? "Saw" : "Sine");
+		case P_FM_RATIO: {
+			// FM Ratio: explicitly handle to ensure it displays properly
+			float ratio = 0.5f + (index * 0.5f);
+			sprintf(val_buf, "%.1f", ratio);
 			return val_buf;
+		}
 		default:
 			break;
 		}
@@ -720,6 +692,18 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 			return lfo_shape_name[index];
 		case R_ROOTNT:
 			return root_note_name[index % 12];
+		case R_FMRATO: {
+			// FM Ratio: display 0.5, 1.0, 1.5, 2.0, etc up to 8.5
+			float ratio = 0.5f + (index * 0.5f);
+			sprintf(val_buf, "%.1f", ratio);
+			return val_buf;
+		}
+		case R_FMWAVE: {
+			// FM Waveform: Sine, Saw, Square (with blending)
+			const char* wave_names[] = {"Sine", "Saw", "Sqr"};
+			sprintf(val_buf, "%s", wave_names[index % 3]);
+			return val_buf;
+		}
 		default:
 			break;
 		}
